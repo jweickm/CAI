@@ -17,13 +17,23 @@
 % - [x] Fix cross mit variabler dauer + jitter:
 % - [x]     Synchron:  [1500 ms +- 500 ms] + variable R peak timing 
 % - [x]     Asynchron: [1200 ms +- 500 ms] + variable R peak timing
-% - [ ] implement maximum response time
+% - [x] implement maximum response time
 % - [ ] implement data export
-% - [ ] implement keys to abort experiment
-% - [ ] implement block design with breaks (90 trials per block)
+% - [x] implement keys to abort experiment
+% - [x] implement block design with breaks (90 trials per block)
 
 % BONUS:
 % - [ ] left-handed stimuli
+% - [ ] faster while loop for searching the arduino signal:
+    % draw fix
+    % WaitSecs
+    % search while loop
+    % break
+    % show stimuli 
+
+% CAREFUL: Set "Fixed width pulse" under 'Setup' -> 'Fast Response Output'
+% to ~ 24 ms ( 0.024 s) (= 1.5 x framerate)
+
 
 % -------------------------
 % Initialization 
@@ -162,6 +172,10 @@ practiceMat = trialMat(:,randi(360, 1, 12));
 syncTrialDur = 1.500; % in seconds duration of sync trial
 trialDuration = [syncTrialDur, syncTrialDur - 0.300]; % trial duration in s for synchronous/asynchronous trials
 jitter = .2; % +- jitter in seconds
+
+% delay between R peak and stimulus presentation 
+syncDur = 0.250; % in synchronous trials
+asyncDur = 0.550; % in asynchronous trials
 
 
 %% Set up keys
@@ -367,9 +381,9 @@ for practiceTrial = practiceMat
     max_frames = (currentTrialDur + 1.5)/ifi; % maximum trial duration
     
     if practiceTrial(4) == 1 % synchronous trial
-        peak_frames = 0.250 / ifi;
+        peak_frames = syncDur / ifi;
     elseif practiceTrial(4) == 2 % asynchronous trial
-        peak_frames = 0.550 / ifi;
+        peak_frames = asyncDur / ifi;
     end
     
     while true
@@ -389,6 +403,8 @@ for practiceTrial = practiceMat
                     % do the timing with the R peak, signal is coming from the
                     % arduino
                     
+                    % when fixation cross was fully shown and the first R
+                    % peak is registered
                     if (current_frame >= trial_frames) && (current_ECG_Status == "ON") && (measured == 0)
                         RPeak_timing = current_frame;
                         measured = 1;
@@ -546,12 +562,6 @@ for block = 1:nBlocks
         
         currentTrialDur = trialDuration(expTrial(4)); % 1 if synchronous, 2 if asynchronous         
         currentTexture = Screen('MakeTexture', windowPtr, images{expTrial(3),expTrial(2)});
-        
-        if expTrial(4) == 1
-            disp('sync trial');
-        else
-            disp('async trial');
-        end
 
         % disp('Press G and H');
         keyCode = zeros(1, 256);
@@ -568,9 +578,11 @@ for block = 1:nBlocks
         max_frames = (currentTrialDur + 1.5)/ifi; % maximum trial duration
 
         if expTrial(4) == 1 % synchronous trial
-            peak_frames = 0.250 / ifi;
+            peak_frames = syncDur / ifi;
+            disp('sync trial');
         elseif expTrial(4) == 2 % asynchronous trial
-            peak_frames = 0.550 / ifi;
+            peak_frames = asyncDur / ifi;
+            disp('async trial');
         end
 
         while true
@@ -578,27 +590,63 @@ for block = 1:nBlocks
             Screen('Flip', windowPtr);
             WaitSecs(0.2);
             [keyIsDown, secs, keyCode, deltaSecs] = KbCheck();
+            
+            %%
+            [skipTrial, terminate] = reactToKeyPressesAIT(keyCodes);
+            if terminate
+                   % Close up shop
+                     ListenChar();
+                    Screen('CloseAll');
+                    sca;
+                    clear Screen;
+                    ShowCursor();
+                    RestrictKeysForKbCheck([]);
+            end
+            %%
+            
             if isequal(keyCode, match_g_h)           
                 measured = 0;
                 startTime = 0;
                 current_frame = 0;
                 
-                while true           
+                buttonPressTiming = GetSecs();
+                
+                while true 
+                    %%
+                    [skipTrial, terminate] = reactToKeyPressesAIT(keyCodes);
+                    if terminate
+                           % Close up shop
+                             ListenChar();
+                            Screen('CloseAll');
+                            sca;
+                            clear Screen;
+                            ShowCursor();
+                            RestrictKeysForKbCheck([]);
+                    end
+                    %%
+                    
                     current_frame = current_frame + 1;
                     
                     if ECG_Active
                         current_ECG_Status = getECGStatus(ard, inputpinNumber);
-                        % do the timing with the R peak, signal is coming from the
-                        % arduino
-
+                        
+                        if current_frame >= trial_frames && measured == 0
+                        % send trigger to labchart
+                            sendTriggerArduinoLabchart(ard, outputPinNumber);
+                        end
+                        
+                        
                         % Get the first R peak that is measured after the
                         % fixation cross duration has completed
                         if (current_frame >= trial_frames) && (current_ECG_Status == "ON") && (measured == 0)
                             RPeak_timing = current_frame;
-                            measured = 1;
+                            measured = 1; % will only be executed once
+                            % send trigger to labchart
+                            sendTriggerArduinoLabchart(ard, outputPinNumber);
                         end
                         
-                        if RPeak_timing > 0 && current_frame >= (RPeak_timing + peak_frames + 2.0/ifi) % if 2 seconds passed after stimulus was shown
+                        % if 2 seconds passed after stimulus was shown
+                        if RPeak_timing > 0 && current_frame >= (RPeak_timing + peak_frames + 2.0/ifi) 
                             reactedTooLate = 1; % abort the trial and feedback that the reaction was too slow
                             break;
                         
@@ -613,10 +661,9 @@ for block = 1:nBlocks
                                 startTime = GetSecs();
                                 % send trigger to labchart
                                 sendTriggerArduinoLabchart(ard, outputPinNumber);
+                                disp(num2str(buttonPressTiming - GetSecs()));
                             end
-
                             Screen('Flip', windowPtr);
-
                             % Check that both keys are still down
                             [keyIsDown, secs, keyCode, deltaSecs] = KbCheck();
                             if ~isequal(keyCode, match_g_h) 

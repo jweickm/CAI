@@ -1,6 +1,6 @@
 % Written by Jakob Weickmann
 
-function[skipTrial, terminate] = reactToKeyPresses_(pahandle, keyCodes)
+function[skipTrial, terminate] = reactToKeyPressesAIT(keyCodes)
 % check for breakKeys (Esc to end to programm, G for attention grabber, P to pause)
     [~, ~, keyCode] = KbCheck();
     terminate = 0; % variable used to abort the experiment early
@@ -16,7 +16,6 @@ function[skipTrial, terminate] = reactToKeyPresses_(pahandle, keyCodes)
         skipTrial = 1;
     elseif find(keyCode) == keyCodes(7) % pause key ('P')
         % wait 
-        PsychPortAudio('Stop', pahandle);
         WaitSecs(1);
         KbWait();
         WaitSecs(0.2);
