@@ -176,9 +176,9 @@ keyCodes = [KbName('Space'), KbName('Return'), KbName(abortExpKey), ...
 
 % if no preloaded stimuli already exist in the folder
 if ~exist('./stimuli/images.mat', 'file')
-    directory_1 = dir('./stimuli/1*r.bmp');
-    directory_2 = dir('./stimuli/2*r.bmp');
-    directory_startbmp = dir('./stimuli/start_r.bmp');
+    directory_1 = dir('./stimuli/1*.bmp');
+    directory_2 = dir('./stimuli/2*.bmp');
+    directory_startbmp = dir('./stimuli/start.bmp');
     images = cell(2,3);
     
     for current_frame = 1:3
@@ -355,7 +355,7 @@ for practiceTrial = practiceMat
     end
     
     while true
-        DrawFormattedText(windowPtr, uint8('Drücken Sie G und H'), 'center', 'center', 0, 77);
+        DrawFormattedText(windowPtr, uint8('Dr?cken Sie G und H'), 'center', 'center', 0, 77);
         Screen('Flip', windowPtr);
         WaitSecs(0.2);
         [keyIsDown, secs, keyCode, deltaSecs] = KbCheck();
@@ -478,7 +478,7 @@ for practiceTrial = practiceMat
             end
             
             if earlyRelease
-                DrawFormattedText(windowPtr, uint8('Sie haben den Finger zu früh gehoben.'), 'center', 'center', 0, 77);
+                DrawFormattedText(windowPtr, uint8('Sie haben den Finger zu frueh gehoben.'), 'center', 'center', 0, 77);
                 Screen('Flip', windowPtr);
                 response(2,practiceTrial(1)) = NaN;
                 response(1,practiceTrial(1)) = responseCheck(hand, finger, keyCode);
@@ -511,7 +511,7 @@ for practiceTrial = practiceMat
 end
 
 % Display message
-DrawFormattedText(windowPtr, uint8('Dies ist das Ende der Übungstrials.'), 'center', 'center', 0, 77);
+DrawFormattedText(windowPtr, uint8('Dies ist das Ende der Uebungstrials.'), 'center', 'center', 0, 77);
 Screen('Flip', windowPtr);
 disp('Press SPACEBAR or ENTER to continue.');
 WaitSecs(1);
