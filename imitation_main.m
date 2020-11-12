@@ -34,7 +34,6 @@
 % CAREFUL: Set "Fixed width pulse" under 'Setup' -> 'Fast Response Output'
 % to ~ 24 ms ( 0.024 s) (= 1.5 x framerate)
 
-
 % -------------------------
 % Initialization 
 % -------------------------
@@ -55,9 +54,10 @@ addpath 'scripts';
 
 AssertOpenGL;
 
-ECG_Active = 1; % if arduino is connected: 1
-Fullscreen = 1;
+ECG_Active = 0; % if arduino is connected: 1
+Fullscreen = 0;
 SkipTests = 1;
+test_mode = 1;
 
 %% ===================================================
 %                       SCREEN SETUP
@@ -74,11 +74,17 @@ end
 PsychDefaultSetup(2);
 rng('shuffle');
 
-%% screens = Screen('Screens');
-%% screenNumber = max(screens);
-SCREEN_NAME = 'side';       % options: 'side', 'main', 'presentation'
-screenNumber = getScreenNumber(SCREEN_NAME);
-    
+
+if test_mode
+    screens = Screen('Screens');
+    screenNumber = max(screens);
+    SkipTests = 1;
+    ECG_Active = 0;
+else
+    SCREEN_NAME = 'side';       % options: 'side', 'main', 'presentation'
+    screenNumber = getScreenNumber(SCREEN_NAME);
+end
+   
 % disable syn tests when coding/debugging but not when running ex periments!!
 if SkipTests
     Screen('Preference', 'SkipSyncTests', 1);
@@ -235,11 +241,11 @@ bgc = 216;
 bgColour_RGB = bgc * ones(1,3); % convert to RGB
 BGC_Psychimaging = bgColour_RGB ./255;
 
-[windowPtr, windowRect] = PsychImaging('OpenWindow', screenNumber, bgColour_RGB, screenRect);
+% [windowPtr, windowRect] = PsychImaging('OpenWindow', screenNumber, BGC_Psychimaging, screenRect);
 
 % using Psychimaging
-% bgColour = bgc/255; % 0 - 1
-% [windowPtr, windowRect] = PsychImaging('OpenWindow', screenNumber, bgColour, screenRect);
+bgColour = bgc/255; % 0 - 1
+[windowPtr, windowRect] = PsychImaging('OpenWindow', screenNumber, bgColour, screenRect);
 
 % Retreive the maximum priority number
 topPriorityLevel = MaxPriority(windowPtr);
@@ -294,7 +300,7 @@ instrText = ['Legen Sie Ihren rechten Zeigefinger auf die [G]-Taste\n'...
     'Sie werden nun mehrere Bilder nacheinander sehen.\n'...
     'Wenn Sie ein Bild mit einer kleinen [1] sehen, dann heben Sie bitte Ihren Zeigefinger.\n'...
     'Wenn Sie ein Bild mit einer kleinen [2] sehen, dann heben Sie bitte Ihren Mittelfinger.'];
-pauseText = 'Goennen Sie sich eine kurze Pause. Sobald Sie weitermachen moechten, druecken Sie die Leertaste.';
+pauseText = 'G?nnen Sie sich eine kurze Pause. Sobald Sie weitermachen m?chten, dr?cken Sie die Leertaste.';
 
 
 %% **************************************************
@@ -387,7 +393,7 @@ for practiceTrial = practiceMat
     end
     
     while true
-        DrawFormattedText(windowPtr, uint8('Drücken Sie G und H'), 'center', 'center', 0, 77);
+        DrawFormattedText(windowPtr, uint8('Dr?cken Sie G und H'), 'center', 'center', 0, 77);
         Screen('Flip', windowPtr);
         WaitSecs(0.2);
         [keyIsDown, secs, keyCode, deltaSecs] = KbCheck();
@@ -514,7 +520,7 @@ for practiceTrial = practiceMat
             end
             
             if earlyRelease
-                DrawFormattedText(windowPtr, uint8('Sie haben den Finger zu früh gehoben.'), 'center', 'center', 0, 77);
+                DrawFormattedText(windowPtr, uint8('Sie haben den Finger zu fr?h gehoben.'), 'center', 'center', 0, 77);
                 Screen('Flip', windowPtr);
                 response(2,practiceTrial(1)) = NaN;
                 response(1,practiceTrial(1)) = responseCheck(hand, finger, keyCode);
