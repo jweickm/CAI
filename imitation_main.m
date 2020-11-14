@@ -30,6 +30,7 @@
     % search while loop
     % break
     % show stimuli 
+% - [x] Umlaute auf Deutsch einfügen (ä, ö, ü)
 
 % CAREFUL: Set "Fixed width pulse" under 'Setup' -> 'Fast Response Output'
 % to ~ 24 ms ( 0.024 s) (= 1.5 x framerate)
@@ -54,10 +55,20 @@ addpath 'scripts';
 
 AssertOpenGL;
 
-ECG_Active = 0; % if arduino is connected: 1
-Fullscreen = 0;
-SkipTests = 1;
-test_mode = 1;
+ECG_Active = 1; % if arduino is connected: 1
+Fullscreen = 1;
+SkipTests = 0;
+test_mode = 0;
+SCREEN_NAME = 'side';       % options: 'side', 'main', 'presentation'
+
+if test_mode
+    screens = Screen('Screens');
+    screenNumber = max(screens);
+    SkipTests = 1;
+    ECG_Active = 0;
+else
+    screenNumber = getScreenNumber(SCREEN_NAME);
+end
 
 %% ===================================================
 %                       SCREEN SETUP
@@ -73,17 +84,6 @@ end
 % Here we call some default settings for setting up Psychtoolbox
 PsychDefaultSetup(2);
 rng('shuffle');
-
-
-if test_mode
-    screens = Screen('Screens');
-    screenNumber = max(screens);
-    SkipTests = 1;
-    ECG_Active = 0;
-else
-    SCREEN_NAME = 'side';       % options: 'side', 'main', 'presentation'
-    screenNumber = getScreenNumber(SCREEN_NAME);
-end
    
 % disable syn tests when coding/debugging but not when running ex periments!!
 if SkipTests
@@ -140,8 +140,7 @@ end
 % subInfo = [{'Subject Number'}, {'Name'}, {'Sex'}, {'Age'}, {'Handedness'};...
 %     {num}, {sub}, {age}, {gender}, {hand}]; % store together in a single variable
 
-subjectCode = input('Subject number (integer):\n');
-hand = input('Handedness (R/L):\n', 's');
+[subjectCode, handedness] = getParticipantDetailsAIT();
 
 
 
@@ -160,20 +159,23 @@ hand = input('Handedness (R/L):\n', 's');
 %       120 incongruent (davon 60 sync, async)
 %       120 neutral (davon 60 sync, async)
 %  every 90 trials: optional break
-nBlocks = 360/90;
+
+nTrials = 360;
+blockLength = 90;
+nBlocks = nTrials/blockLength;
 
 % 2 (congruence) x 2 (timings) x 3 pictures = incongruent index, incongruent
 % middle, congruent index, congruent middle x heat beat timing
 
-trialMat = zeros(3, 360);
-trialMat(1,:) = randperm(360);
+trialMat = zeros(3, nTrials);
+trialMat(1,:) = randperm(nTrials);
 trialMat(2,:) = repmat([1,2,3], 1, 120); % stimulus type 
 trialMat(3,:) = repmat([1,2], 1, 180); % correct finger
-trialMat(4,:) = [repmat([1], 1, 180), repmat([2], 1, 180)]; % asynchronous or synchronous
+trialMat(4,:) = [repmat([1], 1, 180), repmat([2], 1, 180)]; % synchronous or asynchronous
 trialMat = sortrows(trialMat')'; 
 
 % + practice Trials extra generieren
-practiceMat = trialMat(:,randi(360, 1, 12));
+practiceMat = trialMat(:,randi(nTrials, 1, 12));
 
 syncTrialDur = 1.500; % in seconds duration of sync trial
 trialDuration = [syncTrialDur, syncTrialDur - 0.300]; % trial duration in s for synchronous/asynchronous trials
@@ -183,6 +185,8 @@ jitter = .2; % +- jitter in seconds
 syncDur = 0.250; % in synchronous trials
 asyncDur = 0.550; % in asynchronous trials
 
+% preallocate responsesMat
+responsesMat = zeros(3,nTrials);
 
 %% Set up keys
 
@@ -190,22 +194,29 @@ asyncDur = 0.550; % in asynchronous trials
 KbName('UnifyKeyNames');
 
 % keyCodes: [Space, Return, Escape, G, H, X, P]
-abortExpKey = 'Escape';
+abortExpKey = 'ESCAPE';
 pauseKey = 'P';
 abortBlockKey = 'X';
-keyCodes = [KbName('Space'), KbName('Return'), KbName(abortExpKey), ...
+keyCodes = [KbName('SPACE'), KbName('RETURN'), KbName(abortExpKey), ...
     KbName(abortBlockKey), KbName(pauseKey), KbName('G'), KbName('H')];
 
 
 %% ===================================================
 %                   LOAD IMAGES
 % ==========================================================
+if handedness == 1
+    hand = 'r';
+elseif handedness == 2
+    hand = 'l';
+else 
+    warning('Handedness was not correctly recognized. Please enter it in the beginning.');
+end
 
 % if no preloaded stimuli already exist in the folder
 if ~exist('./stimuli/images.mat', 'file')
-    directory_1 = dir('./stimuli/1*r.bmp');
-    directory_2 = dir('./stimuli/2*r.bmp');
-    directory_startbmp = dir('./stimuli/start_r.bmp');
+    directory_1 = dir(['./stimuli/1*', hand,'.bmp']);
+    directory_2 = dir(['./stimuli/2*', hand,'.bmp']);
+    directory_startbmp = dir(['./stimuli/start_', hand, '.bmp']);
     images = cell(2,3);
     
     for current_frame = 1:3
@@ -241,11 +252,12 @@ bgc = 216;
 bgColour_RGB = bgc * ones(1,3); % convert to RGB
 BGC_Psychimaging = bgColour_RGB ./255;
 
-% [windowPtr, windowRect] = PsychImaging('OpenWindow', screenNumber, BGC_Psychimaging, screenRect);
+%[windowPtr, windowRect] = PsychImaging('OpenWindow', screenNumber, BGC_Psychimaging, screenRect);
+[windowPtr, windowRect] = Screen('OpenWindow', screenNumber, bgColour_RGB, screenRect);
 
 % using Psychimaging
-bgColour = bgc/255; % 0 - 1
-[windowPtr, windowRect] = PsychImaging('OpenWindow', screenNumber, bgColour, screenRect);
+%bgColour = bgc/255; % 0 - 1
+%[windowPtr, windowRect] = PsychImaging('OpenWindow', screenNumber, bgColour, screenRect);
 
 % Retreive the maximum priority number
 topPriorityLevel = MaxPriority(windowPtr);
@@ -295,12 +307,21 @@ stimulusRect = [xCenter - (stimulusRadius/ratio), yCenter - (stimulusRadius),...
 
 waitText = ['Bitte warten Sie auf Anweisung \ndurch die '...
     'Versuchsleitung.'];
-instrText = ['Legen Sie Ihren rechten Zeigefinger auf die [G]-Taste\n'...
-    'und Ihren rechten Mittelfinger auf die [H]-Taste.\n'...
+if handedness == 1
+    handText = 'rechten';
+    key1 = '[G]';
+    key2 = '[H]';
+else 
+    handText = 'linken';
+    key1 = '[H]';
+    key2 = '[G]';
+end
+instrText = ['Legen Sie Ihren ', handText, ' Zeigefinger auf die ',key1,'-Taste\n'...
+    'und Ihren ', handText,' Mittelfinger auf die ',key2,'-Taste.\n'...
     'Sie werden nun mehrere Bilder nacheinander sehen.\n'...
     'Wenn Sie ein Bild mit einer kleinen [1] sehen, dann heben Sie bitte Ihren Zeigefinger.\n'...
     'Wenn Sie ein Bild mit einer kleinen [2] sehen, dann heben Sie bitte Ihren Mittelfinger.'];
-pauseText = 'G?nnen Sie sich eine kurze Pause. Sobald Sie weitermachen m?chten, dr?cken Sie die Leertaste.';
+pauseText = 'Gönnen Sie sich eine kurze Pause. Sobald Sie weitermachen möchten, drücken Sie die Leertaste.';
 
 
 %% **************************************************
@@ -312,13 +333,13 @@ Screen('TextFont', windowPtr, 'Calibri');
 Screen('TextSize', windowPtr, 44);
 
 % Display message
-DrawFormattedText(windowPtr, uint8(waitText), 'center', 'center', 0, 77);
+DrawFormattedText(windowPtr, waitText, 'center', 'center', 0, 77);
 Screen('Flip', windowPtr);
 disp('Press SPACEBAR or ENTER to continue.');
 KbWait();
 
 % display instructions before 1st block
-DrawFormattedText(windowPtr, uint8(instrText), 'center', 'center', 0, 77);
+DrawFormattedText(windowPtr, instrText, 'center', 'center', 0, 77);
 Screen('Flip', windowPtr);
 
 disp('Press SPACEBAR or ENTER to continue.');
@@ -326,19 +347,19 @@ WaitSecs(1);
 KbWait();
 
 fprintf('\nExperiment is about to begin.\n\n');
-DrawFormattedText(windowPtr, uint8('Das Experiment beginnt '), 'center', 'center', 0, 77);
+DrawFormattedText(windowPtr, 'Das Experiment beginnt ', 'center', 'center', 0, 77);
 Screen('Flip', windowPtr);
 WaitSecs(0.5);
 disp('Experiment begins in 3...');
-DrawFormattedText(windowPtr, uint8('Das Experiment beginnt .'), 'center', 'center', 0, 77);
+DrawFormattedText(windowPtr, 'Das Experiment beginnt .', 'center', 'center', 0, 77);
 Screen('Flip', windowPtr);
 WaitSecs(0.5);
 disp('                     2...');
-DrawFormattedText(windowPtr, uint8('Das Experiment beginnt ..'), 'center', 'center', 0, 77);
+DrawFormattedText(windowPtr, 'Das Experiment beginnt ..', 'center', 'center', 0, 77);
 Screen('Flip', windowPtr);
 WaitSecs(0.5);
 disp('                     1...');
-DrawFormattedText(windowPtr, uint8('Das Experiment beginnt ...'), 'center', 'center', 0, 77);
+DrawFormattedText(windowPtr, 'Das Experiment beginnt ...', 'center', 'center', 0, 77);
 Screen('Flip', windowPtr);
 WaitSecs(0.5);
 disp('-------------------------');
@@ -351,13 +372,12 @@ match_g_h = zeros(1,256);
 match_g_h(KbName({'g', 'h'})) = 1;
 ListenChar(2); % suppress listening to Matlab
 oldenablekeys = RestrictKeysForKbCheck([keyCodes]);
-response = zeros(2,480);
 startTexture = Screen('MakeTexture', windowPtr, start_image);
 
 %% =======================================
 % PRACTICE BLOCKS
 % =============================================
-skipPractice = 1;
+skipPractice = 0;
 for practiceTrial = practiceMat
     if skipPractice == 1
         break;
@@ -393,16 +413,34 @@ for practiceTrial = practiceMat
     end
     
     while true
-        DrawFormattedText(windowPtr, uint8('Dr?cken Sie G und H'), 'center', 'center', 0, 77);
+        DrawFormattedText(windowPtr, 'Drücken und halten Sie [G] und [H]', 'center', 'center', 0, 77);
         Screen('Flip', windowPtr);
         WaitSecs(0.2);
         [keyIsDown, secs, keyCode, deltaSecs] = KbCheck();
+        
+       %% Check for key presses
+        [skipTrial, terminate] = reactToKeyPressesAIT(keyCodes);
+        if terminate
+               % Close up shop
+               exit_routineAIT(subjectCode, origin_folder, trialMat, responsesMat);
+               return
+        end
+            
         if isequal(keyCode, match_g_h)           
             measured = 0;
             startTime = 0;
             current_frame = 0;
             
             while true
+                %% Check for key presses
+                [skipTrial, terminate] = reactToKeyPressesAIT(keyCodes);
+                if terminate
+                   % Close up shop
+                   exit_routineAIT(subjectCode, origin_folder, trialMat, responsesMat);
+                   return
+                end
+                %% -------------------------------------
+                    
                 current_frame = current_frame + 1;
                 if ECG_Active
                     current_ECG_Status = getECGStatus(ard, inputpinNumber);
@@ -520,29 +558,29 @@ for practiceTrial = practiceMat
             end
             
             if earlyRelease
-                DrawFormattedText(windowPtr, uint8('Sie haben den Finger zu fr?h gehoben.'), 'center', 'center', 0, 77);
+                DrawFormattedText(windowPtr, 'Sie haben den Finger zu früh gehoben.', 'center', 'center', 0, 77);
                 Screen('Flip', windowPtr);
-                response(2,practiceTrial(1)) = NaN;
-                response(1,practiceTrial(1)) = responseCheck(hand, finger, keyCode);
+                responsesMat(2,practiceTrial(1)) = NaN;
+                responsesMat(1,practiceTrial(1)) = responseCheck(hand, finger, keyCode);
                 WaitSecs(1);
                 break;
                 
             elseif reactedTooLate
-                DrawFormattedText(windowPtr, uint8('Bitte reagieren Sie schneller.'), 'center', 'center', 0, 77);
+                DrawFormattedText(windowPtr, 'Bitte reagieren Sie schneller.', 'center', 'center', 0, 77);
                 Screen('Flip', windowPtr);
-                response(2,practiceTrial(1)) = 99;
-                response(1,practiceTrial(1)) = responseCheck(hand, finger, keyCode);
+                responsesMat(2,practiceTrial(1)) = 99;
+                responsesMat(1,practiceTrial(1)) = responseCheck(hand, finger, keyCode);
                 WaitSecs(1);
                 break;
                 
             elseif completed
                 % disp(finger); % output the correct response to the terminal
                 Screen('Flip', windowPtr);
-                response(2,practiceTrial(1)) = GetSecs() - startTime;
-                response(1,practiceTrial(1)) = responseCheck(hand, finger, keyCode);
+                responsesMat(2,practiceTrial(1)) = GetSecs() - startTime;
+                responsesMat(1,practiceTrial(1)) = responseCheck(hand, finger, keyCode);
                 
                 WaitSecs(0.2);
-                disp(response(:,practiceTrial(1)));
+                disp(responsesMat(:,practiceTrial(1)));
                 WaitSecs(0.2);
                 break;
             end
@@ -552,7 +590,7 @@ for practiceTrial = practiceMat
 end
 
 % Display message
-DrawFormattedText(windowPtr, uint8('Dies ist das Ende der �bungstrials.'), 'center', 'center', 0, 77);
+DrawFormattedText(windowPtr, 'Dies ist das Ende der Übungstrials.', 'center', 'center', 0, 77);
 Screen('Flip', windowPtr);
 disp('Press SPACEBAR or ENTER to continue.');
 WaitSecs(1);
@@ -563,7 +601,7 @@ KbWait();
 % =============================================
 for block = 1:nBlocks
     startTrialID = (block-1) + 1;
-    endTrialID   = block * 90;
+    endTrialID   = block * blockLength;
     for expTrial = trialMat(:,startTrialID : endTrialID)
         
         currentTrialDur = trialDuration(expTrial(4)); % 1 if synchronous, 2 if asynchronous         
@@ -580,6 +618,7 @@ for block = 1:nBlocks
 
         current_jitter = (rand(1) * 2 * jitter) - jitter; % jitter
         disp(['Dur: ', num2str(currentTrialDur + current_jitter)]);
+        responsesMat(3, expTrial(1)) = currentTrialDur + current_jitter;
         trial_frames = currentTrialDur/ifi + current_jitter/ifi; % fixation cross duration in frames
         max_frames = (currentTrialDur + 1.5)/ifi; % maximum trial duration
 
@@ -592,24 +631,19 @@ for block = 1:nBlocks
         end
 
         while true
-            DrawFormattedText(windowPtr, uint8('Press G and H'), 'center', 'center', 0, 77);
+            DrawFormattedText(windowPtr, 'Drücken und halten Sie [G] und [H]', 'center', 'center', 0, 77);
             Screen('Flip', windowPtr);
             WaitSecs(0.2);
             [keyIsDown, secs, keyCode, deltaSecs] = KbCheck();
             
-            %%
+           %% Check for key presses
             [skipTrial, terminate] = reactToKeyPressesAIT(keyCodes);
             if terminate
                    % Close up shop
-                     ListenChar();
-                    Screen('CloseAll');
-                    sca;
-                    clear Screen;
-                    ShowCursor();
-                    RestrictKeysForKbCheck([]);
+                   exit_routineAIT(subjectCode, origin_folder, trialMat, responsesMat);
+                   return
             end
-            %%
-            
+           %%
             if isequal(keyCode, match_g_h)           
                 measured = 0;
                 startTime = 0;
@@ -618,16 +652,12 @@ for block = 1:nBlocks
                 buttonPressTiming = GetSecs();
                 
                 while true 
-                    %%
+                    %% Check for key presses
                     [skipTrial, terminate] = reactToKeyPressesAIT(keyCodes);
                     if terminate
-                           % Close up shop
-                             ListenChar();
-                            Screen('CloseAll');
-                            sca;
-                            clear Screen;
-                            ShowCursor();
-                            RestrictKeysForKbCheck([]);
+                       % Close up shop
+                       exit_routineAIT(subjectCode, origin_folder, trialMat, responsesMat);
+                       return
                     end
                     %%
                     
@@ -755,29 +785,28 @@ for block = 1:nBlocks
                 end
 
                 if earlyRelease
-                    DrawFormattedText(windowPtr, uint8('You lifted your finger too early.'), 'center', 'center', 0, 77);
+                    DrawFormattedText(windowPtr, 'Sie haben den Finger zu früh gehoben.', 'center', 'center', 0, 77);
                     Screen('Flip', windowPtr);
-                    response(2,practiceTrial(1)) = NaN;
-                    response(1,practiceTrial(1)) = responseCheck(hand, finger, keyCode);
+                    responsesMat(2,practiceTrial(1)) = 77;
+                    responsesMat(1,practiceTrial(1)) = responseCheck(hand, finger, keyCode);
                     WaitSecs(1);
                     break;
                 
                 elseif reactedTooLate
-                    DrawFormattedText(windowPtr, uint8('Bitte reagieren Sie schneller.'), 'center', 'center', 0, 77);
+                    DrawFormattedText(windowPtr, 'Bitte reagieren Sie schneller.', 'center', 'center', 0, 77);
                     Screen('Flip', windowPtr);
-                    response(2,practiceTrial(1)) = 99;
-                    response(1,practiceTrial(1)) = responseCheck(hand, finger, keyCode);
+                    responsesMat(2,expTrial(1)) = 99;
+                    responsesMat(1,expTrial(1)) = responseCheck(hand, finger, keyCode);
                     WaitSecs(1);
                     break;
                     
                 elseif completed
                     disp(finger); % output the correct response to the terminal
                     Screen('Flip', windowPtr);
-                    response(2,expTrial(1)) = GetSecs() - startTime;
-                    response(1,expTrial(1)) = responseCheck(hand, finger, keyCode);
-
+                    responsesMat(2,expTrial(1)) = GetSecs() - startTime;
+                    responsesMat(1,expTrial(1)) = responseCheck(hand, finger, keyCode);
                     WaitSecs(0.2);
-                    disp(response(:,expTrial(1)));
+                    disp(responsesMat(:,expTrial(1)));
                     WaitSecs(0.2);
                     break;
                 end
@@ -786,7 +815,7 @@ for block = 1:nBlocks
         Screen('Close', currentTexture);
     end
     % Display message
-    DrawFormattedText(windowPtr, uint8(pauseText), 'center', 'center', 0, 77);
+    DrawFormattedText(windowPtr, pauseText, 'center', 'center', 0, 77);
     Screen('Flip', windowPtr);
     disp('Press SPACEBAR or ENTER to continue.');
     WaitSecs(1);
@@ -798,5 +827,6 @@ Screen('CloseAll');
 RestrictKeysForKbCheck([]);
 
 %% DATA EXPORT 
-
-
+% Close up shop
+exit_routineAIT(subjectCode, origin_folder, trialMat, responsesMat);
+return

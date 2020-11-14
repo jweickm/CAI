@@ -5,16 +5,16 @@ function[skipTrial, terminate] = reactToKeyPressesAIT(keyCodes)
     [~, ~, keyCode] = KbCheck();
     terminate = 0; % variable used to abort the experiment early
     skipTrial = 0;
-    if find(keyCode) == keyCodes(3) % abort exp key ('Escape')
+    if any(find(keyCode) == keyCodes(3)) % abort exp key ('Escape')
         % Stop Audio Playback
         PsychPortAudio('Close', []);
         textprogressbar('aborted by user');
         terminate = 1;
         return;
-    elseif find(keyCode) == keyCodes(6) % skip trial key ('X')
+    elseif any(find(keyCode) == keyCodes(6)) % skip trial key ('X')
         % Skip to next trial
         skipTrial = 1;
-    elseif find(keyCode) == keyCodes(7) % pause key ('P')
+    elseif any(find(keyCode) == keyCodes(7)) % pause key ('P')
         % wait 
         WaitSecs(1);
         KbWait();
