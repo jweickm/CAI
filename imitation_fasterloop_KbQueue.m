@@ -33,6 +33,9 @@
 % - [x] Umlaute auf Deutsch einfügen (ä, ö, ü)
 % - [ ] handedness in export
 % - [ ] more beautiful instructions would be nice
+% - [ ] record interbeat interval and save in export
+
+% - [ ] interbeat interval estimate in the beginning
 
 % CAREFUL: Set "Fixed width pulse" under 'Setup' -> 'Fast Response Output'
 % to ~ 24 ms ( 0.024 s) (= 1.5 x framerate)
@@ -58,7 +61,7 @@ addpath 'scripts';
 AssertOpenGL;
 
 ECG_Active = 1; % if arduino is connected: 1
-Fullscreen = 1;
+Fullscreen = 0;
 SkipTests = 0;
 test_mode = 1;
 SCREEN_NAME = 'side';       % options: 'side', 'main', 'presentation'
@@ -165,6 +168,7 @@ end
 nTrials = 360;
 blockLength = 90;
 nBlocks = nTrials/blockLength;
+nPracticeTrials = 20;
 
 % 2 (congruence) x 2 (timings) x 3 pictures = incongruent index, incongruent
 % middle, congruent index, congruent middle x heat beat timing
@@ -177,7 +181,7 @@ trialMat(4,:) = [repmat([1], 1, 180), repmat([2], 1, 180)]; % synchronous or asy
 trialMat = sortrows(trialMat')'; 
 
 % + practice Trials extra generieren
-practiceMat = trialMat(:,randi(nTrials, 1, 12));
+practiceMat = trialMat(:,randi(nTrials, 1, nPracticeTrials)); % last number is n of practice Trials
 
 syncTrialDur = 1.500; % in seconds duration of sync trial
 trialDuration = [syncTrialDur, syncTrialDur - 0.300]; % trial duration in s for synchronous/asynchronous trials
@@ -190,7 +194,9 @@ asyncDur = 0.550; % in asynchronous trials
 % preallocate responsesMat
 responsesMat = zeros(3,nTrials);
 
-%% Set up keys
+%% ===================================================
+% Set up keys
+% ===================================================
 
 % provide a consistent mapping of keyCodes to key names on all operating systems.
 KbName('UnifyKeyNames');
@@ -201,6 +207,20 @@ pauseKey = 'P';
 abortBlockKey = 'X';
 keyCodes = [KbName('SPACE'), KbName('RETURN'), KbName(abortExpKey), ...
     KbName(abortBlockKey), KbName(pauseKey), KbName('G'), KbName('H')];
+
+% Setup of response keys
+match_g_h = zeros(1,256);
+match_g_h(KbName({'G', 'H'})) = 1;
+g_h = KbName({'G', 'H'});
+% ------------------------------------------
+% suppress listening to Matlab
+% ListenChar(2); % must be disabled for use with KbQueueCheck
+% ------------------------------------------
+oldenablekeys = RestrictKeysForKbCheck([keyCodes]);
+
+keyboardID = 0;
+KbQueueCreate(keyboardID, match_g_h);
+
 
 
 %% ===================================================
@@ -370,10 +390,6 @@ disp('-------------------------');
 %% =======================================
 % EXPERIMENTAL LOOP
 % =============================================
-match_g_h = zeros(1,256);
-match_g_h(KbName({'g', 'h'})) = 1;
-ListenChar(2); % suppress listening to Matlab
-oldenablekeys = RestrictKeysForKbCheck([keyCodes]);
 startTexture = Screen('MakeTexture', windowPtr, start_image);
 
 %% =======================================
@@ -403,24 +419,30 @@ for practiceTrial = practiceMat
     reactedTooLate = 0;
     RPeak_timing = 0;
     
-    current_jitter = (rand(1) * 2 * jitter) - jitter; % jitter 
+    currentJitter = (rand(1) * 2 * jitter) - jitter; % jitter 
     
-    trial_frames = currentTrialDur/ifi + current_jitter/ifi; % fixation cross duration in frames
-    max_frames = (currentTrialDur + 1.5)/ifi; % maximum trial duration
+    currentFixDuration = currentTrialDur + currentJitter; % fixation cross duration in seconds
+    currentFixFrames = currentFixDuration/ifi; % fixation cross duration in frames
+    maxTrialDuration = currentTrialDur + 1.5; % maximum trial duration in seconds
+    maxTrialFrames = maxTrialDuration/ifi; % maximum trial duration in frames
+    maxReactionTime = 1.0; % maximum reaction time in seconds
     
     if practiceTrial(4) == 1 % synchronous trial
-        peak_frames = syncDur / ifi;
+        peakDelay = syncDur; % delay after first R peak until stimulus presentation in seconds
     elseif practiceTrial(4) == 2 % asynchronous trial
-        peak_frames = asyncDur / ifi;
+        peakDelay = asyncDur;
     end
+    peakDelayFrames = peakDelay / ifi; % delay after 1st R peak until stim presentation in frames
     
     while true
         DrawFormattedText(windowPtr, 'Drücken und halten Sie [G] und [H]', 'center', 'center', 0, 77);
         Screen('Flip', windowPtr);
-        WaitSecs(0.2);
-        [keyIsDown, secs, keyCode, deltaSecs] = KbCheck();
         
-       %% Check for key presses
+        % Check the keyboard           
+        [~, ~, keyCode] = KbCheck(); % must be disabled for use with KbQueueCheck
+       
+        
+       %% Check for functional key presses
         [skipTrial, terminate] = reactToKeyPressesAIT(keyCodes);
         if terminate
                % Close up shop
@@ -428,167 +450,128 @@ for practiceTrial = practiceMat
                return
         end
             
-        if isequal(keyCode, match_g_h)           
+        if all(keyCode(KbName({'G', 'H'})))
+            % Start the Trial
             measured = 0;
-            startTime = 0;
+            stimulusTiming = 0;
             current_frame = 0;
+            trialStartTime = GetSecs();
+            currentPhase = 0;
+            %ListenChar(2);
             
+            disp('pre while');
             while true
-                %% Check for key presses
-                [skipTrial, terminate] = reactToKeyPressesAIT(keyCodes);
-                if terminate
-                   % Close up shop
-                   exit_routineAIT(subjectCode, origin_folder, trialMat, responsesMat);
-                   return
+                disp(1);
+                [pressed, firstPress, firstRelease] = KbQueueCheck(keyboardID);
+                disp(2);
+                % [~, ~, keyCode] = KbCheck();
+%                 if ~all(ismember(g_h, find(keyCode)))
+%                     break;
+%                 end
+                fprintf('any');
+                disp(any(firstRelease(71:72)));
+                fprintf('find');
+                disp(find(firstRelease));
+                fprintf('\n');
+                fprintf('sum');
+                disp(sum(firstRelease));
+                
+                if sum(firstRelease(71:72)) % any(firstRelease(71:72))
+                    disp('released');
+                    DrawFormattedText(windowPtr, 'O', 'center', 'center', 0, 77);
+                    Screen('Flip', windowPtr);
+                    break;
                 end
-                %% -------------------------------------
+                
+                disp(3);
+                elapsedTime = GetSecs() - trialStartTime;
+                disp(4);
+                % WaitSecs(0.16);  
                     
-                current_frame = current_frame + 1;
-                if ECG_Active
+                %% Phase 0: Fix Cross
+                if currentPhase == 0
+                    % Draw the fixation cross in black, set it to the center of screen
+                    Screen('DrawLines', windowPtr, allCoords, lineWidthPix, black, [xCenter yCenter]);
+                    Screen('Flip', windowPtr);
+                    currentPhase = 1;
+                end
+
+                %% Phase 1 ECG: Get 1st R peak
+                % when fixation cross was fully shown, register the first R Peak
+                if currentPhase == 1 && elapsedTime >= currentFixDuration && ECG_Active
                     current_ECG_Status = getECGStatus(ard, inputPinNumber);
                     % do the timing with the R peak, signal is coming from the
                     % arduino
-                    
-                    % when fixation cross was fully shown and the first R
-                    % peak is registered
-                    if (current_frame >= trial_frames) && (current_ECG_Status == "ON") && (measured == 0)
-                        RPeak_timing = current_frame;
-                        measured = 1;
+                    if current_ECG_Status == "ON"
+                        RPeak_timing = GetSecs() - trialStartTime;
+                        currentPhase = 2;
                     end
-                    
-                    if RPeak_timing > 0 && current_frame >= (RPeak_timing + peak_frames + 2.0/ifi) % if 2 seconds passed after stimulus was shown
-                        reactedTooLate = 1; % abort the trial and feedback that the reaction was too slow
-                        break;
-                    
-                    elseif RPeak_timing > 0 && current_frame >= (RPeak_timing + peak_frames)
-                        % timing of stimulus drawing
-                        % Draw the image for this trial on the screen
-                        % time = 0
-                        Screen('DrawTexture', windowPtr, currentTexture, [], stimulusRect);
-                        
-                        % Get the timing of stimulus presentation
-                        if startTime == 0
-                            startTime = GetSecs();
-                            % send trigger to labchart
-                            sendTriggerArduinoLabchart(ard, outputPinNumber);
-                        end
-                        
-                        Screen('Flip', windowPtr);
-                        
-                        % Check that both keys are still down
-                        [keyIsDown, secs, keyCode, deltaSecs] = KbCheck();
-                        if ~isequal(keyCode, match_g_h) 
-                            completed = 1;
-                            break;
-                        end
-                        
-                    elseif RPeak_timing > 0 && current_frame >= (RPeak_timing + peak_frames - 0.200/ifi)
-                        % Check that both keys are still down
-                        [keyIsDown, secs, keyCode, deltaSecs] = KbCheck();
-                        if ~isequal(keyCode, match_g_h) 
-                            earlyRelease = 1;
-                            break;
-                        end
-                        % Draw the neutral starting image on the screen
-                        % time = -200
-                        Screen('DrawTexture', windowPtr, startTexture, [], stimulusRect);
-                        Screen('Flip', windowPtr);
-                        
-                    else   
-                        % Check that both keys are still down
-                        [keyIsDown, secs, keyCode, deltaSecs] = KbCheck();
-                        if ~isequal(keyCode, match_g_h) 
-                            earlyRelease = 1;
-                            break;
-                        end
-                        % Draw the fixation cross in black, set it to the center of screen
-                        Screen('DrawLines', windowPtr, allCoords, lineWidthPix, black, [xCenter yCenter]);
-                        Screen('Flip', windowPtr);
-                    end 
-                    
-                else % no ARDUINO
-                    
-                    if current_frame >= (trial_frames + peak_frames + 2.0/ifi) % if 2 seconds passed after stimulus was shown
-                        reactedTooLate = 1; % abort the trial and feedback that the reaction was too slow
-                        break;
-
-                    elseif current_frame >= (trial_frames + peak_frames)
-                        % timing of stimulus drawing
-                        % Draw the image for this trial on the screen
-                        % time = 0
-                        Screen('DrawTexture', windowPtr, currentTexture, [], stimulusRect);
-                        
-                        % Get the timing of stimulus presentation
-                        if startTime == 0
-                            startTime = GetSecs();
-                        end
-                        
-                        Screen('Flip', windowPtr);
-                        
-                        % Check that both keys are still down
-                        [keyIsDown, secs, keyCode, deltaSecs] = KbCheck();
-                        if ~isequal(keyCode, match_g_h) 
-                            completed = 1;
-                            break;
-                        end
-                        
-                    elseif current_frame >= (trial_frames + peak_frames - 0.200/ifi)
-                        % Draw the neutral starting image on the screen
-                        % time = -200
-                        Screen('DrawTexture', windowPtr, startTexture, [], stimulusRect);
-                        Screen('Flip', windowPtr);
-                        % Check that both keys are still down
-                        [keyIsDown, secs, keyCode, deltaSecs] = KbCheck();
-                        if ~isequal(keyCode, match_g_h) 
-                            earlyRelease = 1;
-                            break;
-                        end
-                        
-                    else
-                        % Draw the fixation cross in black, set it to the center of screen
-                        Screen('DrawLines', windowPtr, allCoords, lineWidthPix, black, [xCenter yCenter]);
-                        Screen('Flip', windowPtr);
-                        
-                        % Check that both keys are still down
-                        [keyIsDown, secs, keyCode, deltaSecs] = KbCheck();
-                        if ~isequal(keyCode, match_g_h) 
-                            earlyRelease = 1;
-                            break;
-                        end
-                    end 
                 end
-            end
+
+                %% Phase 2: Draw the neutral starting image on the screen
+                % time = -200
+                if (currentPhase == 2 && elapsedTime >= RPeak_timing + peakDelay - .200) || ... % with ECG
+                        (currentPhase == 1 && elapsedTime >= currentFixDuration && ~ECG_Active) % without ECG
+                    Screen('DrawTexture', windowPtr, startTexture, [], stimulusRect);
+                    Screen('Flip', windowPtr);
+                    currentPhase = 3;
+                end
+
+                %% Phase 3: Draw the stimulus image for this trial on the screen
+                % time = 0
+                if (currentPhase == 3 && elapsedTime >= RPeak_timing + peakDelay && ECG_Active) || ... % with ECG
+                        (currentPhase == 3 && elapsedTime >= currentFixDuration + .200 && ~ECG_Active) % without ECG
+                    Screen('DrawTexture', windowPtr, currentTexture, [], stimulusRect);
+                    % Get the timing of stimulus presentation
+                    stimulusTiming = GetSecs();
+                    if ECG_Active
+                        % send trigger to labchart
+                        sendTriggerArduinoLabchart(ard, outputPinNumber);
+                    end
+                    Screen('Flip', windowPtr);
+                    currentPhase = 4;
+                end
+
+                %% Phase 4: Reaction too late
+                if currentPhase == 4 && elapsedTime >= stimulusTiming + maxReactionTime
+                    currentPhase = 5;
+                    break;
+                end
+                
+                disp(7);
+            end     
             
-            if earlyRelease
+            Beeper();
+            %% Save the result of the trial
+            % Trial ended too early
+            if currentPhase <= 3
                 DrawFormattedText(windowPtr, 'Sie haben den Finger zu früh gehoben.', 'center', 'center', 0, 77);
                 Screen('Flip', windowPtr);
-                responsesMat(2,practiceTrial(1)) = NaN;
-                responsesMat(1,practiceTrial(1)) = responseCheck(hand, finger, keyCode);
                 WaitSecs(1);
+                continue;
+
+            % Trial completed
+            elseif currentPhase == 4
+                Screen('Flip', windowPtr);
+                responsesMat(2,practiceTrial(1)) = GetSecs() - stimulusTiming;
+                responsesMat(1,practiceTrial(1)) = responseCheck_KbQueue(hand, finger, firstRelease);
+                disp(responsesMat(:,practiceTrial(1)));
+                WaitSecs(0.4);
                 break;
-                
-            elseif reactedTooLate
+
+            % Reaction too late
+            elseif currentPhase == 5
                 DrawFormattedText(windowPtr, 'Bitte reagieren Sie schneller.', 'center', 'center', 0, 77);
                 Screen('Flip', windowPtr);
                 responsesMat(2,practiceTrial(1)) = 99;
-                responsesMat(1,practiceTrial(1)) = responseCheck(hand, finger, keyCode);
+                responsesMat(1,practiceTrial(1)) = responseCheck_KbQueue(hand, finger, keyCode);
                 WaitSecs(1);
-                break;
-                
-            elseif completed
-                % disp(finger); % output the correct response to the terminal
-                Screen('Flip', windowPtr);
-                responsesMat(2,practiceTrial(1)) = GetSecs() - startTime;
-                responsesMat(1,practiceTrial(1)) = responseCheck(hand, finger, keyCode);
-                
-                WaitSecs(0.2);
-                disp(responsesMat(:,practiceTrial(1)));
-                WaitSecs(0.2);
                 break;
             end
         end
     end
-    Screen('Close', currentTexture);
+    Screen('Close', currentTexture');
+    WaitSecs(1);
 end
 
 % Display message
@@ -618,17 +601,17 @@ for block = 1:nBlocks
         reactedTooLate = 0;
         RPeak_timing = 0;
 
-        current_jitter = (rand(1) * 2 * jitter) - jitter; % jitter
-        disp(['Dur: ', num2str(currentTrialDur + current_jitter)]);
-        responsesMat(3, expTrial(1)) = currentTrialDur + current_jitter;
-        trial_frames = currentTrialDur/ifi + current_jitter/ifi; % fixation cross duration in frames
-        max_frames = (currentTrialDur + 1.5)/ifi; % maximum trial duration
+        currentJitter = (rand(1) * 2 * jitter) - jitter; % jitter
+        disp(['Dur: ', num2str(currentTrialDur + currentJitter)]);
+        responsesMat(3, expTrial(1)) = currentTrialDur + currentJitter;
+        currentFixFrames = currentTrialDur/ifi + currentJitter/ifi; % fixation cross duration in frames
+        maxTrialFrames = (currentTrialDur + 1.5)/ifi; % maximum trial duration
 
         if expTrial(4) == 1 % synchronous trial
-            peak_frames = syncDur / ifi;
+            peakDelayFrames = syncDur / ifi;
             disp('sync trial');
         elseif expTrial(4) == 2 % asynchronous trial
-            peak_frames = asyncDur / ifi;
+            peakDelayFrames = asyncDur / ifi;
             disp('async trial');
         end
 
@@ -648,7 +631,7 @@ for block = 1:nBlocks
            %%
             if isequal(keyCode, match_g_h)           
                 measured = 0;
-                startTime = 0;
+                stimulusTiming = 0;
                 current_frame = 0;
                 
                 buttonPressTiming = GetSecs();
@@ -667,36 +650,29 @@ for block = 1:nBlocks
                     
                     if ECG_Active
                         current_ECG_Status = getECGStatus(ard, inputPinNumber);
-                        
-                        if current_frame >= trial_frames && measured == 0
-                        % send trigger to labchart
-                            sendTriggerArduinoLabchart(ard, outputPinNumber);
-                        end
-                        
+                                                
                         
                         % Get the first R peak that is measured after the
                         % fixation cross duration has completed
-                        if (current_frame >= trial_frames) && (current_ECG_Status == "ON") && (measured == 0)
+                        if (current_frame >= currentFixFrames) && (current_ECG_Status == "ON") && (measured == 0)
                             RPeak_timing = current_frame;
                             measured = 1; % will only be executed once
-                            % send trigger to labchart
-                            sendTriggerArduinoLabchart(ard, outputPinNumber);
                         end
                         
                         % if 2 seconds passed after stimulus was shown
-                        if RPeak_timing > 0 && current_frame >= (RPeak_timing + peak_frames + 2.0/ifi) 
+                        if RPeak_timing > 0 && current_frame >= (RPeak_timing + peakDelayFrames + 2.0/ifi) 
                             reactedTooLate = 1; % abort the trial and feedback that the reaction was too slow
                             break;
                         
-                        elseif RPeak_timing > 0 && current_frame >= (RPeak_timing + peak_frames)
+                        elseif RPeak_timing > 0 && current_frame >= (RPeak_timing + peakDelayFrames)
                             % timing of stimulus drawing
                             % Draw the image for this trial on the screen
                             % time = 0
                             Screen('DrawTexture', windowPtr, currentTexture, [], stimulusRect);
 
                             % Get the first timing of stimulus presentation
-                            if startTime == 0
-                                startTime = GetSecs();
+                            if stimulusTiming == 0
+                                stimulusTiming = GetSecs();
                                 % send trigger to labchart
                                 sendTriggerArduinoLabchart(ard, outputPinNumber);
                                 disp(num2str(buttonPressTiming - GetSecs()));
@@ -709,7 +685,7 @@ for block = 1:nBlocks
                                 break;
                             end
 
-                        elseif RPeak_timing > 0 && current_frame >= (RPeak_timing + peak_frames - 0.200/ifi)
+                        elseif RPeak_timing > 0 && current_frame >= (RPeak_timing + peakDelayFrames - 0.200/ifi)
                             % Check that both keys are still down
                             [keyIsDown, secs, keyCode, deltaSecs] = KbCheck();
                             if ~isequal(keyCode, match_g_h) 
@@ -735,19 +711,19 @@ for block = 1:nBlocks
 
                     else % no ARDUINO
                         
-                        if current_frame >= (trial_frames + peak_frames + 2.0/ifi) % if 2 seconds passed after stimulus was shown
+                        if current_frame >= (currentFixFrames + peakDelayFrames + 2.0/ifi) % if 2 seconds passed after stimulus was shown
                             reactedTooLate = 1; % abort the trial and feedback that the reaction was too slow
                             break;
                         
-                        elseif current_frame >= (trial_frames + peak_frames)
+                        elseif current_frame >= (currentFixFrames + peakDelayFrames)
                             % timing of stimulus drawing
                             % Draw the image for this trial on the screen
                             % time = 0
                             Screen('DrawTexture', windowPtr, currentTexture, [], stimulusRect);
 
                             % Get the timing of stimulus presentation
-                            if startTime == 0
-                                startTime = GetSecs();
+                            if stimulusTiming == 0
+                                stimulusTiming = GetSecs();
                             end
 
                             Screen('Flip', windowPtr);
@@ -759,7 +735,7 @@ for block = 1:nBlocks
                                 break;
                             end
 
-                        elseif current_frame >= (trial_frames + peak_frames - 0.200/ifi)
+                        elseif current_frame >= (currentFixFrames + peakDelayFrames - 0.200/ifi)
                             % Draw the neutral starting image on the screen
                             % time = -200
                             Screen('DrawTexture', windowPtr, startTexture, [], stimulusRect);
@@ -805,7 +781,7 @@ for block = 1:nBlocks
                 elseif completed
                     disp(finger); % output the correct response to the terminal
                     Screen('Flip', windowPtr);
-                    responsesMat(2,expTrial(1)) = GetSecs() - startTime;
+                    responsesMat(2,expTrial(1)) = GetSecs() - stimulusTiming;
                     responsesMat(1,expTrial(1)) = responseCheck(hand, finger, keyCode);
                     WaitSecs(0.2);
                     disp(responsesMat(:,expTrial(1)));

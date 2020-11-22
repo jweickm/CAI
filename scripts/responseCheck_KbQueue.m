@@ -1,7 +1,7 @@
-function[answerCorrect] = responseCheck(hand, finger, keyCode)
+function[answerCorrect] = responseCheck_KbQueue(hand, finger, firstRelease)
 answerCorrect = logical(finger - 1); % middle finger becomes correct
 
-if any(find(keyCode) == KbName('H')) % which means that 'G' was released
+if any(find(firstRelease) == KbName('G')) % which means that 'G' was released
     answerCorrect = ~answerCorrect; % in this case flip the logit
 end
 
