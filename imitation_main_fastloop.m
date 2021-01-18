@@ -214,14 +214,9 @@ match_g_h(KbName({'G', 'H'})) = 1;
 g_h = KbName({'G', 'H'});
 % ------------------------------------------
 % suppress listening to Matlab
-% ListenChar(2); % must be disabled for use with KbQueueCheck
+ListenChar(2); % must be disabled for use with KbQueueCheck
 % ------------------------------------------
 oldenablekeys = RestrictKeysForKbCheck([keyCodes]);
-
-keyboardID = 0;
-KbQueueCreate(keyboardID, match_g_h);
-
-
 
 %% ===================================================
 %                   LOAD IMAGES
@@ -450,7 +445,7 @@ for practiceTrial = practiceMat
                return
         end
             
-        if all(keyCode(KbName({'G', 'H'})))
+        if all(keyCode(g_h)) % when both keys are pressed
             % Start the Trial
             measured = 0;
             stimulusTiming = 0;
@@ -459,22 +454,17 @@ for practiceTrial = practiceMat
             currentPhase = 0;
 
             while true
-                disp(1);
-                [pressed, firstPress, firstRelease] = KbQueueCheck(keyboardID);
-                disp(2);
-                % [~, ~, keyCode] = KbCheck();
-%                 if ~all(ismember(g_h, find(keyCode)))
-%                     break;
-%                 end
-                
-                if sum(firstRelease(71:72)) % any(firstRelease(71:72))
-                    disp('released');
-                    DrawFormattedText(windowPtr, 'O', 'center', 'center', 0, 77);
-                    Screen('Flip', windowPtr);
+                [~, ~, keyCode] = KbCheck();
+                if ~all(ismember(g_h, find(keyCode)))
                     break;
                 end
                 
                 elapsedTime = GetSecs() - trialStartTime;
+                
+                if sum(keyCode(71:72)) 
+                    responseTime = GetSecs();
+                    break;
+                end
 
                 %% Phase 0: Fix Cross
                 if currentPhase == 0
@@ -525,11 +515,8 @@ for practiceTrial = practiceMat
                     currentPhase = 5;
                     break;
                 end
-                
-                disp(7);
             end     
             
-            Beeper();
             %% Save the result of the trial
             % Trial ended too early
             if currentPhase <= 3
@@ -541,10 +528,10 @@ for practiceTrial = practiceMat
             % Trial completed
             elseif currentPhase == 4
                 Screen('Flip', windowPtr);
-                responsesMat(2,practiceTrial(1)) = GetSecs() - stimulusTiming;
-                responsesMat(1,practiceTrial(1)) = responseCheck_KbQueue(hand, finger, firstRelease);
+                responsesMat(2,practiceTrial(1)) = responseTime - stimulusTiming;
+                responsesMat(1,practiceTrial(1)) = responseCheck(hand, finger, keyCode);
                 disp(responsesMat(:,practiceTrial(1)));
-                WaitSecs(0.4);
+                WaitSecs(0.5);
                 break;
 
             % Reaction too late
@@ -552,7 +539,7 @@ for practiceTrial = practiceMat
                 DrawFormattedText(windowPtr, 'Bitte reagieren Sie schneller.', 'center', 'center', 0, 77);
                 Screen('Flip', windowPtr);
                 responsesMat(2,practiceTrial(1)) = 99;
-                responsesMat(1,practiceTrial(1)) = responseCheck_KbQueue(hand, finger, keyCode);
+                responsesMat(1,practiceTrial(1)) = responseCheck(hand, finger, keyCode);
                 WaitSecs(1);
                 break;
             end
