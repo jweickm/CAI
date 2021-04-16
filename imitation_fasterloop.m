@@ -444,9 +444,6 @@ for practiceTrial = practiceMat
                 end
                 %% -------------------------------------
                     
-                
-                
-                
                 current_frame = current_frame + 1;
                 if ECG_Active
                     current_ECG_Status = getECGStatus(ard, inputpinNumber);
