@@ -222,7 +222,7 @@ g_h = KbName({'G', 'H'});
 % suppress listening to Matlab
 % ListenChar(2); % must be disabled for use with KbQueueCheck
 % ------------------------------------------
-oldenablekeys = RestrictKeysForKbCheck([keyCodes]);
+oldenablekeys = RestrictKeysForKbCheck(keyCodes);
 
 keyboardID = 0;
 KbQueueCreate(keyboardID, match_g_h);
@@ -566,8 +566,10 @@ DrawFormattedText(windowPtr, 'Dies ist das Ende der Übungstrials.', 'center', '
 Screen('Flip', windowPtr);
 disp('Press SPACEBAR or ENTER to continue.');
 WaitSecs(1);
+RestrictKeysForKbCheck(KbName('space', 'return')); % changes the acceptable keys for KbCheck to only space and return
 KbWait();
-    
+RestrictKeysForKbCheck(keyCodes); % unlocks all other keys again for KbCheck
+
 %% =======================================
 % EXPERIMENTAL BLOCKS
 % =============================================
